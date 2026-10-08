@@ -3,7 +3,7 @@
 ![平台](https://img.shields.io/badge/平台-Windows%2010%20%7C%2011-0078D4)
 ![.NET](https://img.shields.io/badge/.NET-10.0-512BD4?logo=dotnet&logoColor=white)
 ![许可证](https://img.shields.io/badge/许可证-Apache--2.0-blue)
-[![最新版本](https://img.shields.io/github/v/release/Dandelion-nj/scrcpy-LiteUI)](https://github.com/Dandelion-nj/scrcpy-LiteUI/releases)
+[![最新版本](https://img.shields.io/github/v/release/Roambus/scrcpy-LiteUI)](https://github.com/Roambus/scrcpy-LiteUI/releases)
 
 Windows 上给 [scrcpy](https://github.com/Genymobile/scrcpy) 套的一层图形化启动器。
 目标是把「安卓投屏」这件事从命令行里解放出来：**插上线或连上 Wi-Fi，点一下就能投**。
@@ -13,7 +13,7 @@ Windows 上给 [scrcpy](https://github.com/Genymobile/scrcpy) 套的一层图形
 
 ## 快速开始
 
-到 [Releases](https://github.com/Dandelion-nj/scrcpy-LiteUI/releases) 下载最新的 exe，
+到 [Releases](https://github.com/Roambus/scrcpy-LiteUI/releases) 下载最新的 exe，
 单文件便携版，无需安装，**双击即可运行**（`scrcpy`、`adb` 已随包附带）。
 
 > 发布页里显示的名字是「快投.exe」，但 GitHub 的发布资产不支持中文文件名（会被平台清成
