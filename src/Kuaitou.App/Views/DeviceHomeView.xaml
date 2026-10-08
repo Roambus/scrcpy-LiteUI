@@ -1,0 +1,511 @@
+<UserControl x:Class="Kuaitou.App.Views.DeviceHomeView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             x:Name="Root"
+             FontSize="14">
+
+    <!--
+      单台设备的首页。对应旧版 index.html 的 .main + .statusbar：
+      顶部设备名 / 状态 + 搜索框 + 操作按钮固定在上方，快捷启动区与「全部应用」标题行也不参与滚动，
+      滚动只发生在下面的应用网格里。底部是状态栏。
+    -->
+
+    <UserControl.Resources>
+        <!-- 图标缺失时垫在底下的首字母底色（旧版是 accent → 紫的斜向渐变） -->
+        <LinearGradientBrush x:Key="Brush.IconFallback" StartPoint="0,0" EndPoint="1,1">
+            <GradientStop Color="#3B82F6" Offset="0" />
+            <GradientStop Color="#8B5CF6" Offset="1" />
+        </LinearGradientBrush>
+
+        <!-- 卡片右上角的 ＋ / ✓ / × 角标按钮 -->
+        <Style x:Key="CardBadgeButton" TargetType="Button">
+            <Setter Property="Width" Value="20" />
+            <Setter Property="Height" Value="20" />
+            <Setter Property="Margin" Value="0,6,6,0" />
+            <Setter Property="HorizontalAlignment" Value="Right" />
+            <Setter Property="VerticalAlignment" Value="Top" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="Focusable" Value="False" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border Background="{TemplateBinding Background}" CornerRadius="10">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
+                        </Border>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- 一张应用卡片：同一份模板按 CardWidth / IconSize 等尺寸属性同时服务快捷启动区与应用区 -->
+        <DataTemplate x:Key="AppCardTemplate">
+            <Border Width="{Binding CardWidth}"
+                    Margin="0,0,12,12"
+                    Padding="{Binding CardPadding}"
+                    CornerRadius="{DynamicResource Radius}"
+                    Cursor="Hand"
+                    ToolTip="{Binding Name}"
+                    MouseLeftButtonDown="OnCardClick">
+                <Border.Style>
+                    <!--
+                      悬停只「浮动」：整张卡片抬起来 + 一层柔和阴影，底色与描边保持不动。
+                      位移用 RenderTransform，不参与布局，所以卡片不会互相挤动。
+                    -->
+                    <Style TargetType="Border">
+                        <Setter Property="Background" Value="{DynamicResource Brush.Card}" />
+                        <Setter Property="BorderBrush" Value="{DynamicResource Brush.Border}" />
+                        <Setter Property="BorderThickness" Value="1" />
+                        <Style.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter Property="RenderTransform">
+                                    <Setter.Value>
+                                        <TranslateTransform Y="-3" />
+                                    </Setter.Value>
+                                </Setter>
+                                <Setter Property="Effect">
+                                    <Setter.Value>
+                                        <DropShadowEffect BlurRadius="16"
+                                                          ShadowDepth="4"
+                                                          Direction="270"
+                                                          Opacity="0.22"
+                                                          Color="#000000" />
+                                    </Setter.Value>
+                                </Setter>
+                            </Trigger>
+                        </Style.Triggers>
+                    </Style>
+                </Border.Style>
+
+                <Grid>
+                    <StackPanel VerticalAlignment="Center">
+                        <!-- 图标：首字母底色垫下面，拿到图标后盖在上面 -->
+                        <!-- 圆角靠 Clip（带 RadiusX/Y 的几何）实现：ClipToBounds 只裁矩形，裁不出圆角 -->
+                        <Border Width="{Binding IconSize}"
+                                Height="{Binding IconSize}"
+                                HorizontalAlignment="Center"
+                                CornerRadius="{Binding IconRadius}"
+                                Clip="{Binding IconClip}">
+                            <Grid>
+                                <Border Background="{StaticResource Brush.IconFallback}" />
+                                <TextBlock HorizontalAlignment="Center"
+                                           VerticalAlignment="Center"
+                                           FontSize="{Binding InitialFontSize}"
+                                           FontWeight="SemiBold"
+                                           Foreground="White"
+                                           Text="{Binding Initial}" />
+                                <Image Source="{Binding Icon}" Stretch="UniformToFill" />
+                            </Grid>
+                        </Border>
+
+                        <!-- 未命中搜索关键词：整名单行显示，超出省略 -->
+                        <TextBlock Margin="0,10,0,0"
+                                   FontSize="{Binding NameFontSize}"
+                                   TextAlignment="Center"
+                                   TextTrimming="CharacterEllipsis"
+                                   Foreground="{DynamicResource Brush.Text}"
+                                   Text="{Binding Name}">
+                            <TextBlock.Style>
+                                <Style TargetType="TextBlock">
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding HasHighlight}" Value="True">
+                                            <Setter Property="Visibility" Value="Collapsed" />
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </TextBlock.Style>
+                        </TextBlock>
+
+                        <!-- 命中搜索关键词：按命中区间分段渲染，命中的那段加底色 -->
+                        <ItemsControl Margin="0,10,0,0"
+                                      HorizontalAlignment="Center"
+                                      ItemsSource="{Binding Segments}">
+                            <ItemsControl.Style>
+                                <Style TargetType="ItemsControl">
+                                    <Setter Property="Visibility" Value="Collapsed" />
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding HasHighlight}" Value="True">
+                                            <Setter Property="Visibility" Value="Visible" />
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </ItemsControl.Style>
+                            <ItemsControl.ItemsPanel>
+                                <ItemsPanelTemplate>
+                                    <StackPanel Orientation="Horizontal" />
+                                </ItemsPanelTemplate>
+                            </ItemsControl.ItemsPanel>
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <!-- 只有应用区会高亮，字号固定用应用区的 12 -->
+                                    <TextBlock FontSize="12" Text="{Binding Text}">
+                                        <TextBlock.Style>
+                                            <Style TargetType="TextBlock">
+                                                <Setter Property="Foreground" Value="{DynamicResource Brush.Text}" />
+                                                <Style.Triggers>
+                                                    <DataTrigger Binding="{Binding IsMark}" Value="True">
+                                                        <Setter Property="Background" Value="{DynamicResource Brush.MarkBg}" />
+                                                        <Setter Property="Foreground" Value="{DynamicResource Brush.MarkFg}" />
+                                                        <Setter Property="FontWeight" Value="SemiBold" />
+                                                    </DataTrigger>
+                                                </Style.Triggers>
+                                            </Style>
+                                        </TextBlock.Style>
+                                    </TextBlock>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </StackPanel>
+
+                    <!-- 角标：快捷启动区里是 ×，应用区里是 ＋ / ✓（已在快捷启动） -->
+                    <Button Command="{Binding ToggleQuickCommand}"
+                            ToolTip="{Binding AddButtonHint}"
+                            AutomationProperties.Name="{Binding AddButtonHint}">
+                        <Button.Style>
+                            <Style TargetType="Button" BasedOn="{StaticResource CardBadgeButton}">
+                                <Setter Property="Background" Value="{DynamicResource Brush.Accent}" />
+                                <Setter Property="Opacity" Value="0" />
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding ShowCheckBadge}" Value="True">
+                                        <Setter Property="Background" Value="{DynamicResource Brush.Green}" />
+                                        <Setter Property="Opacity" Value="1" />
+                                    </DataTrigger>
+                                    <DataTrigger Binding="{Binding ShowRemoveBadge}" Value="True">
+                                        <Setter Property="Background" Value="#8C8B93A7" />
+                                    </DataTrigger>
+                                    <DataTrigger Binding="{Binding IsMouseOver, RelativeSource={RelativeSource AncestorType=Border}}"
+                                                 Value="True">
+                                        <Setter Property="Opacity" Value="1" />
+                                    </DataTrigger>
+                                    <Trigger Property="IsMouseOver" Value="True">
+                                        <Setter Property="Opacity" Value="1" />
+                                    </Trigger>
+                                </Style.Triggers>
+                            </Style>
+                        </Button.Style>
+                        <Grid Width="12" Height="12">
+                            <Path Data="M6,1 V11 M1,6 H11"
+                                  Stroke="White"
+                                  StrokeThickness="1.8"
+                                  StrokeStartLineCap="Round"
+                                  StrokeEndLineCap="Round">
+                                <Path.Style>
+                                    <Style TargetType="Path">
+                                        <Setter Property="Visibility" Value="Collapsed" />
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding ShowPlusBadge}" Value="True">
+                                                <Setter Property="Visibility" Value="Visible" />
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </Path.Style>
+                            </Path>
+                            <Path Data="M1,6 L4.6,10 L11,2"
+                                  Stroke="White"
+                                  StrokeThickness="1.8"
+                                  StrokeStartLineCap="Round"
+                                  StrokeEndLineCap="Round">
+                                <Path.Style>
+                                    <Style TargetType="Path">
+                                        <Setter Property="Visibility" Value="Collapsed" />
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding ShowCheckBadge}" Value="True">
+                                                <Setter Property="Visibility" Value="Visible" />
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </Path.Style>
+                            </Path>
+                            <Path Data="M2,2 L10,10 M10,2 L2,10"
+                                  Stroke="White"
+                                  StrokeThickness="1.8"
+                                  StrokeStartLineCap="Round"
+                                  StrokeEndLineCap="Round">
+                                <Path.Style>
+                                    <Style TargetType="Path">
+                                        <Setter Property="Visibility" Value="Collapsed" />
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding ShowRemoveBadge}" Value="True">
+                                                <Setter Property="Visibility" Value="Visible" />
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </Path.Style>
+                            </Path>
+                        </Grid>
+                    </Button>
+                </Grid>
+            </Border>
+        </DataTemplate>
+    </UserControl.Resources>
+
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+
+        <Grid Grid.Row="0">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="*" />
+            </Grid.RowDefinitions>
+
+            <!--
+              第一行就是搜索框 + 右侧三个操作（原来上面的「设备名 / 状态 + 地址」两行已按用户要求删掉：
+              设备名与状态在侧边栏和底部状态栏都有，不必在顶部再占一块）。
+            -->
+            <Border Grid.Row="0" Padding="22,18,22,14">
+                <StackPanel>
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+
+                        <!-- 搜索框（占位提示文字用一层不接收鼠标的 TextBlock 叠出来） -->
+                        <Grid Grid.Column="0">
+                            <TextBox Style="{StaticResource InputBox}"
+                                     Text="{Binding Search, UpdateSourceTrigger=PropertyChanged}"
+                                     AutomationProperties.Name="搜索应用" />
+                            <TextBlock Margin="12,0,0,0"
+                                       VerticalAlignment="Center"
+                                       IsHitTestVisible="False"
+                                       FontSize="13"
+                                       Foreground="{DynamicResource Brush.TextDim}"
+                                       Text="搜索应用（支持拼音 / 首字母，如 wx、weixin）">
+                                <TextBlock.Style>
+                                    <Style TargetType="TextBlock">
+                                        <Setter Property="Visibility" Value="Collapsed" />
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding Search}" Value="">
+                                                <Setter Property="Visibility" Value="Visible" />
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </TextBlock.Style>
+                            </TextBlock>
+                            <Button Width="26"
+                                    Height="26"
+                                    Margin="0,0,6,0"
+                                    HorizontalAlignment="Right"
+                                    Command="{Binding ClearSearchCommand}"
+                                    AutomationProperties.Name="清空搜索"
+                                    ToolTip="清空">
+                                <Button.Style>
+                                    <Style TargetType="Button" BasedOn="{StaticResource TitleBarButton}">
+                                        <Setter Property="Visibility" Value="Collapsed" />
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding HasSearch}" Value="True">
+                                                <Setter Property="Visibility" Value="Visible" />
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </Button.Style>
+                                <Path Data="M0,0 L8,8 M8,0 L0,8"
+                                      Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"
+                                      StrokeThickness="1.6"
+                                      StrokeStartLineCap="Round"
+                                      StrokeEndLineCap="Round" />
+                            </Button>
+                        </Grid>
+
+                        <StackPanel Grid.Column="1" Orientation="Horizontal" Margin="12,0,0,0">
+                            <Button Style="{StaticResource BtnPrimary}"
+                                    Content="镜像桌面"
+                                    Margin="0,0,8,0"
+                                    IsEnabled="{Binding Device.IsOnline}"
+                                    Command="{Binding LaunchDesktopCommand}"
+                                    AutomationProperties.Name="镜像桌面" />
+                            <Button Style="{StaticResource Btn}"
+                                    Content="解锁"
+                                    Margin="0,0,8,0"
+                                    IsEnabled="{Binding Device.IsOnline}"
+                                    Command="{Binding UnlockCommand}"
+                                    AutomationProperties.Name="立即解锁" />
+                            <Button Style="{StaticResource Btn}"
+                                    Content="关屏"
+                                    IsEnabled="{Binding Device.IsOnline}"
+                                    Command="{Binding ScreenOffCommand}"
+                                    AutomationProperties.Name="关闭物理屏幕" />
+                        </StackPanel>
+                    </Grid>
+                </StackPanel>
+            </Border>
+
+            <!-- ==================== 快捷启动（钉在顶部，不随列表滚动） ==================== -->
+            <StackPanel Grid.Row="1" Margin="22,0,22,0">
+                <StackPanel Orientation="Horizontal" Margin="0,0,0,10">
+                    <TextBlock VerticalAlignment="Center"
+                               FontSize="12"
+                               FontWeight="SemiBold"
+                               Foreground="{DynamicResource Brush.TextDim}"
+                               Text="快捷启动" />
+                    <TextBlock Margin="8,0,0,0"
+                               VerticalAlignment="Center"
+                               FontSize="12"
+                               Foreground="{DynamicResource Brush.TextDim}"
+                               Text="{Binding QuickCountText}" />
+                </StackPanel>
+
+                <Border Padding="16,22">
+                    <Border.Style>
+                        <Style TargetType="Border" BasedOn="{StaticResource SectionCard}">
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding HasQuick}" Value="True">
+                                    <Setter Property="Visibility" Value="Collapsed" />
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </Border.Style>
+                    <TextBlock HorizontalAlignment="Center"
+                               TextAlignment="Center"
+                               Style="{StaticResource ItemDesc}"
+                               Text="暂无快捷启动应用 — 鼠标移到应用卡片上，点右上角的添加按钮即可加入" />
+                </Border>
+
+                <ItemsControl ItemsSource="{Binding QuickApps}"
+                              ItemTemplate="{StaticResource AppCardTemplate}"
+                              Margin="0,0,-12,0">
+                    <ItemsControl.Style>
+                        <Style TargetType="ItemsControl">
+                            <Setter Property="Visibility" Value="Visible" />
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding HasQuick}" Value="False">
+                                    <Setter Property="Visibility" Value="Collapsed" />
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </ItemsControl.Style>
+                    <ItemsControl.ItemsPanel>
+                        <ItemsPanelTemplate>
+                            <WrapPanel />
+                        </ItemsPanelTemplate>
+                    </ItemsControl.ItemsPanel>
+                </ItemsControl>
+            </StackPanel>
+
+            <!-- ==================== 全部应用（标题行钉住，只有网格滚动） ==================== -->
+            <StackPanel Grid.Row="2" Orientation="Horizontal" Margin="22,4,22,10">
+                <TextBlock VerticalAlignment="Center"
+                           FontSize="12"
+                           FontWeight="SemiBold"
+                           Foreground="{DynamicResource Brush.TextDim}"
+                           Text="全部应用" />
+                <Button Style="{StaticResource BtnMini}"
+                        Margin="10,0,0,0"
+                        Content="刷新"
+                        Command="{Binding RefreshCommand}"
+                        AutomationProperties.Name="刷新应用列表" />
+            </StackPanel>
+
+            <Grid Grid.Row="3" Margin="22,0,22,8">
+                <ScrollViewer VerticalScrollBarVisibility="Hidden"
+                              PanningMode="VerticalOnly">
+                    <!-- 顶部留一点余量，悬停把卡片抬起来时不会被滚动区裁掉 -->
+                    <ItemsControl ItemsSource="{Binding Apps}"
+                                  ItemTemplate="{StaticResource AppCardTemplate}"
+                                  Margin="0,6,-12,0">
+                        <ItemsControl.ItemsPanel>
+                            <ItemsPanelTemplate>
+                                <WrapPanel />
+                            </ItemsPanelTemplate>
+                        </ItemsControl.ItemsPanel>
+                    </ItemsControl>
+                </ScrollViewer>
+
+                <TextBlock HorizontalAlignment="Center"
+                           VerticalAlignment="Top"
+                           Margin="0,40,0,0"
+                           Text="没有匹配的应用">
+                    <TextBlock.Style>
+                        <Style TargetType="TextBlock" BasedOn="{StaticResource ItemDesc}">
+                            <Setter Property="Visibility" Value="Collapsed" />
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding HasNoResults}" Value="True">
+                                    <Setter Property="Visibility" Value="Visible" />
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </TextBlock.Style>
+                </TextBlock>
+
+                <TextBlock HorizontalAlignment="Center"
+                           VerticalAlignment="Top"
+                           Margin="0,40,0,0"
+                           Text="还没有读到应用列表 — 点「刷新」重试">
+                    <TextBlock.Style>
+                        <Style TargetType="TextBlock" BasedOn="{StaticResource ItemDesc}">
+                            <Setter Property="Visibility" Value="Collapsed" />
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding HasNoApps}" Value="True">
+                                    <Setter Property="Visibility" Value="Visible" />
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </TextBlock.Style>
+                </TextBlock>
+            </Grid>
+        </Grid>
+
+        <!-- ==================== 底部状态栏（单行，紧贴内容，不留多余空行） ==================== -->
+        <Border Grid.Row="1"
+                Padding="22,8"
+                BorderBrush="{DynamicResource Brush.Border}"
+                BorderThickness="0,1,0,0">
+            <Grid>
+                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                    <Ellipse Width="9" Height="9" VerticalAlignment="Center">
+                        <Ellipse.Style>
+                            <Style TargetType="Ellipse">
+                                <Setter Property="Fill" Value="{DynamicResource Brush.TextDim}" />
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding Device.StateKind}" Value="online">
+                                        <Setter Property="Fill" Value="{DynamicResource Brush.Green}" />
+                                    </DataTrigger>
+                                    <DataTrigger Binding="{Binding Device.StateKind}" Value="auth">
+                                        <Setter Property="Fill" Value="{DynamicResource Brush.Warn}" />
+                                    </DataTrigger>
+                                    <DataTrigger Binding="{Binding Device.StateKind}" Value="offline">
+                                        <Setter Property="Fill" Value="{DynamicResource Brush.Red}" />
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </Ellipse.Style>
+                    </Ellipse>
+                    <TextBlock Margin="8,0,0,0"
+                               VerticalAlignment="Center"
+                               FontSize="12"
+                               Foreground="{DynamicResource Brush.Text}"
+                               Text="{Binding Device.StateText}" />
+                    <TextBlock Margin="12,0,0,0"
+                               VerticalAlignment="Center"
+                               FontSize="12"
+                               TextTrimming="CharacterEllipsis"
+                               Text="{Binding Hint}">
+                        <TextBlock.Style>
+                            <Style TargetType="TextBlock">
+                                <Setter Property="Foreground" Value="{DynamicResource Brush.Accent}" />
+                                <Setter Property="Visibility" Value="Collapsed" />
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding HasHint}" Value="True">
+                                        <Setter Property="Visibility" Value="Visible" />
+                                    </DataTrigger>
+                                    <DataTrigger Binding="{Binding HintIsError}" Value="True">
+                                        <Setter Property="Foreground" Value="{DynamicResource Brush.Red}" />
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </TextBlock.Style>
+                    </TextBlock>
+                </StackPanel>
+                <TextBlock HorizontalAlignment="Right"
+                           VerticalAlignment="Center"
+                           FontSize="12"
+                           Foreground="{DynamicResource Brush.TextDim}"
+                           Text="{Binding AppCountText}" />
+            </Grid>
+        </Border>
+    </Grid>
+</UserControl>

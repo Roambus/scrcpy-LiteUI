@@ -5,50 +5,54 @@ on:
     branches: [main]
   pull_request:
 
-jobs:
-  lint:
-    # 纯静态检查，不依赖系统，用 Linux 跑得快
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
-      - name: 安装开发依赖
-        run: pip install ruff pytest
-      - name: 静态检查（ruff）
-        run: ruff check .
+env:
+  DOTNET_NOLOGO: "true"
+  DOTNET_CLI_TELEMETRY_OPTOUT: "true"
+  # 三个 job 都用它，升 SDK 只改这一处
+  DOTNET_VERSION: "10.0.x"
 
-  test:
-    # 本项目只跑 Windows，测试也在 Windows 上跑：能顺带发现平台相关的导入问题
+jobs:
+  format:
+    # 静态检查。以前这条是 ubuntu 上跑 ruff——现在不能这么干了：三个项目都钉了
+    # net10.0-windows + UseWPF，这个目标框架的引用包只有 Windows 上有，Linux 上连
+    # dotnet restore 都过不去，所以三条流水线一起挪到 Windows。
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-dotnet@v4
         with:
-          python-version: "3.12"
-      - name: 安装依赖
-        run: pip install -r requirements.txt
-      - name: 单元测试（pytest）
-        run: pytest -q
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+      - name: 还原
+        run: dotnet restore Kuaitou.sln
+      - name: 格式检查
+        # --no-restore：上一步已经还原过；本步只做检查，不改工作区
+        run: dotnet format Kuaitou.sln --verify-no-changes --no-restore
+
+  test:
+    # 本项目只跑 Windows，测试也在 Windows 上跑：能顺带发现平台相关的调用问题
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+      - name: 单元测试（xUnit）
+        run: dotnet test Kuaitou.sln --logger "console;verbosity=normal"
 
   package:
     # 交付物是 exe，所以单独有个 job 把它真打一遍。它一次验证两件事：
     #   1）干净克隆（没有 icons/，未入库）也能打出包；
-    #   2）产物里带的版本号与源码 storage.APP_VERSION 一致——忘了升版本号就发不出去。
-    # 产物 45MB，不上传 artifact：这个 job 管验证，不管分发。
+    #   2）产物里带的版本号与 Directory.Build.props 一致——忘了升版本号就发不出去。
+    # 产物 80MB+，不上传 artifact：这个 job 管验证，不管分发。
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-dotnet@v4
         with:
-          python-version: "3.12"
-          cache: pip
-          cache-dependency-path: requirements.txt
-      - name: 安装依赖
-        run: pip install -r requirements.txt
-      - name: 打包
-        run: python -m PyInstaller --noconfirm --clean KuaitouBuild.spec
-      - name: 校验产物版本号与源码一致
-        # 不传产物路径：默认值在脚本里拼，省得中文文件名经 PowerShell 转手出岔子
-        run: python scripts/check_exe_version.py
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+      - name: 打包（单文件自包含）
+        run: dotnet publish src/Kuaitou.App -c Release -r win-x64 -o dist
+      - name: 校验产物版本号与 Directory.Build.props 一致
+        # 不传产物路径：默认值 dist/快投.exe 在脚本里拼，省得中文文件名经 PowerShell 转手出岔子
+        shell: pwsh
+        run: ./scripts/check-exe-version.ps1

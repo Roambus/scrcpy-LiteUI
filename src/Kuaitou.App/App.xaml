@@ -1,0 +1,19 @@
+<Application x:Class="Kuaitou.App.App"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:local="clr-namespace:Kuaitou.App">
+    <!--
+      刻意不写 StartupUri：主窗口由 App.OnStartup 在单实例判定通过后手动创建，
+      否则窗口会在「发现已有实例、准备退出」之前先闪出来。
+    -->
+    <Application.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <!-- 令牌字典放第一个：ThemeManager 靠替换它来切主题 -->
+                <ResourceDictionary Source="Themes/Tokens.Light.xaml" />
+                <!-- 控件样式：按钮 / 输入框 / 下拉 / 开关 / 卡片，颜色一律 DynamicResource 引用令牌 -->
+                <ResourceDictionary Source="Themes/Controls.xaml" />
+            </ResourceDictionary.MergedDictionaries>
+        </ResourceDictionary>
+    </Application.Resources>
+</Application>

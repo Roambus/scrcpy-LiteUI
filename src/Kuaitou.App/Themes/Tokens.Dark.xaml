@@ -1,0 +1,41 @@
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+    <!--
+      深色主题令牌。与 Tokens.Light.xaml 键名完全一致，只换值。
+      CSS 里的 radius / radius-sm 两主题相同，这里也给一份，保证换字典后所有键都还在。
+      CSS 里的 t-fast / t / t-slow 是过渡时长，WPF 侧由具体动画各自声明 Duration，不做成令牌。
+    -->
+
+    <SolidColorBrush x:Key="Brush.Bg" Color="#0B0F16" />
+    <SolidColorBrush x:Key="Brush.BgElev" Color="#121823" />
+    <SolidColorBrush x:Key="Brush.Card" Color="#171E29" />
+    <SolidColorBrush x:Key="Brush.CardHover" Color="#212938" />
+    <SolidColorBrush x:Key="Brush.Border" Color="#252D3C" />
+    <SolidColorBrush x:Key="Brush.BorderStrong" Color="#3A4459" />
+    <SolidColorBrush x:Key="Brush.Text" Color="#EEF1F7" />
+    <SolidColorBrush x:Key="Brush.TextDim" Color="#939CB2" />
+    <SolidColorBrush x:Key="Brush.Accent" Color="#4C8DFF" />
+    <SolidColorBrush x:Key="Brush.AccentHover" Color="#6BA0FF" />
+    <SolidColorBrush x:Key="Brush.AccentSoft" Color="#294C8DFF" />
+    <SolidColorBrush x:Key="Brush.Green" Color="#2ECC9B" />
+    <SolidColorBrush x:Key="Brush.Warn" Color="#E7B155" />
+    <SolidColorBrush x:Key="Brush.Red" Color="#F2555A" />
+    <SolidColorBrush x:Key="Brush.MarkBg" Color="#524C8DFF" />
+    <SolidColorBrush x:Key="Brush.MarkFg" Color="#A8C8FF" />
+    <SolidColorBrush x:Key="Brush.Hairline" Color="#0DFFFFFF" />
+
+    <!-- 内容区上下边缘的渐变遮罩：从背景色淡出到透明，让标题栏 / 窗口底边不再是一条硬切线 -->
+    <LinearGradientBrush x:Key="Brush.FadeTop" StartPoint="0,0" EndPoint="0,1">
+        <GradientStop Offset="0" Color="#0B0F16" />
+        <GradientStop Offset="1" Color="#000B0F16" />
+    </LinearGradientBrush>
+    <LinearGradientBrush x:Key="Brush.FadeBottom" StartPoint="0,0" EndPoint="0,1">
+        <GradientStop Offset="0" Color="#000B0F16" />
+        <GradientStop Offset="1" Color="#0B0F16" />
+    </LinearGradientBrush>
+
+    <CornerRadius x:Key="Radius">12</CornerRadius>
+    <CornerRadius x:Key="RadiusSm">8</CornerRadius>
+
+</ResourceDictionary>

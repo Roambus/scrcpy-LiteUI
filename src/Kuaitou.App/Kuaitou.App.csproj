@@ -1,0 +1,70 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <UseWPF>true</UseWPF>
+    <RootNamespace>Kuaitou.App</RootNamespace>
+
+    <!--
+      产物仍叫「快投.exe」：老用户的配置 / 图标都存在这个文件名的 NTFS 数据流（ADS）里，
+      改了文件名就读不到了（见方案文件「风险」一节的跨版本数据兼容）。
+    -->
+    <AssemblyName>快投</AssemblyName>
+    <ApplicationIcon>..\..\appicon.ico</ApplicationIcon>
+
+    <!-- 单文件自包含发布：目标机不需要装任何运行时（见方案文件「技术基线」） -->
+    <RuntimeIdentifier>win-x64</RuntimeIdentifier>
+    <SelfContained>true</SelfContained>
+    <PublishSingleFile>true</PublishSingleFile>
+    <IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
+    <EnableCompressionInSingleFile>true</EnableCompressionInSingleFile>
+    <!-- WPF 不支持裁剪，开了会直接报 NETSDK1168 -->
+    <PublishTrimmed>false</PublishTrimmed>
+    <PublishReadyToRun>false</PublishReadyToRun>
+    <SatelliteResourceLanguages>zh-Hans</SatelliteResourceLanguages>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Kuaitou.Core\Kuaitou.Core.csproj" />
+    <ProjectReference Include="..\Kuaitou.Interop\Kuaitou.Interop.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Net.Codecrete.QrCodeGenerator" Version="3.2.1" />
+    <!-- MIT：WPF 没有内置系统托盘，托盘图标与右键菜单靠它（见方案文件三、NuGet 依赖） -->
+    <PackageReference Include="H.NotifyIcon.Wpf" Version="2.4.1" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- 托盘图标要跟 exe 用同一张 appicon.ico；ApplicationIcon 只把它塞进 exe 资源，
+         要当 WPF 资源（ImageSource）用还得单独挂进程序集。 -->
+    <Resource Include="..\..\appicon.ico" Link="appicon.ico" />
+  </ItemGroup>
+
+  <!--
+    随包资源：单文件发布时托管程序集被打进 exe，资源必须内嵌进程序集才能跟着 exe 走。
+    首启由 Core/Storage/ResourceExtractor 按「资源清单」解到 %LOCALAPPDATA%\Kuaitou\runtime\<key>\，
+    AppPaths 打包态的资源目录就指到那儿（方案文件「九、风险」里的方案 A）。
+    统一用 kres/ 逻辑名前缀，运行期按前缀枚举，不依赖编译器默认的命名规则。
+    必须写 WithCulture="false"：SDK 的 AssignCulture 会把逻辑名里以「文化代码」收尾的条目
+    当成卫星程序集资源（`com.baidu.hi.webp` 的 hi=印地语、`com.lemon.lv.webp` 的 lv=拉脱维亚语、
+    `notion.id.webp` 的 id=印尼语……），再被 SatelliteResourceLanguages=zh-Hans 过滤掉，
+    结果 2384 个图标只进包 2356 个、缺的 28 个运行时找不到。
+    只在 Release 下嵌：Debug 直跑用的是仓库根目录里真实的 scrcpy/、icons/，
+    把 30MB 资源塞进每次 Debug 构建纯属拖慢开发循环。
+  -->
+  <ItemGroup Condition="'$(Configuration)' == 'Release'">
+    <EmbeddedResource Include="..\..\config.json" LogicalName="kres/config.json" WithCulture="false" />
+    <EmbeddedResource Include="..\..\android\icondump.dex" LogicalName="kres/android/icondump.dex" WithCulture="false" />
+    <EmbeddedResource Include="..\..\scrcpy\**\*" LogicalName="kres/scrcpy/%(RecursiveDir)%(Filename)%(Extension)" WithCulture="false" />
+    <!--
+      icons/ 不入库（图标版权归各 App 所有者，见 THIRD-PARTY-NOTICES.md），干净克隆里不存在。
+      缺失就直接跳过，包照样能打：少了内置素材库，运行时仍会在线抓图、从手机取图，功能不受影响。
+    -->
+    <EmbeddedResource Include="..\..\icons\**\*" LogicalName="kres/icons/%(RecursiveDir)%(Filename)%(Extension)"
+                      WithCulture="false"
+                      Condition="Exists('$(MSBuildThisFileDirectory)..\..\icons')" />
+  </ItemGroup>
+
+</Project>

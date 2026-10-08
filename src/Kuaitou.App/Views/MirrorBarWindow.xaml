@@ -1,0 +1,76 @@
+<Window x:Class="Kuaitou.App.Views.MirrorBarWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="快投功能栏"
+        WindowStyle="None"
+        AllowsTransparency="True"
+        Background="Transparent"
+        ShowInTaskbar="False"
+        ShowActivated="False"
+        ResizeMode="NoResize"
+        WindowStartupLocation="Manual"
+        Topmost="False"
+        FontFamily="Microsoft YaHei UI, Segoe UI"
+        FontSize="13">
+
+    <!--
+      投屏窗口右侧的功能栏（对应 legacy/kuaitou/winbar.py）。整块是无边框透明窗口：
+      透明像素既不显示也收不到鼠标，鼠标直接穿到下面的投屏画面上（画面上的右键返回照样能用），
+      只有那条不透明的按钮条吃鼠标。窗口的属主在代码里设成 scrcpy 的画面窗口，
+      永远压在画面之上、跟着一起最小化，也不会在 Alt+Tab 里多出一个条目。
+    -->
+
+    <Grid>
+        <!--
+          收起态：贴右边缘一条「透明」热区，鼠标扫过来就展开。
+          底色留 Transparent 而不是有色：透明像素放在透明窗口里照样收得到鼠标，
+          但不会在画面右缘留下一道看得见的竖条（深色主题下那道条尤其像黑边）。
+        -->
+        <Border x:Name="CollapsedBar"
+                HorizontalAlignment="Right"
+                Width="6"
+                Background="Transparent"
+                MouseEnter="OnExpandRequested" />
+
+        <!-- 展开态：整条竖排按钮。高度只包住按钮列（垂直居中），不拉满整个画面高度 -->
+        <Border x:Name="ExpandedBar"
+                HorizontalAlignment="Right"
+                VerticalAlignment="Center"
+                Visibility="Collapsed"
+                Padding="0,8"
+                Background="{DynamicResource Brush.Card}"
+                BorderBrush="{DynamicResource Brush.Border}"
+                BorderThickness="1,1,0,1"
+                CornerRadius="8,0,0,8"
+                MouseLeave="OnCollapseRequested">
+            <!-- ItemsSource 必须显式绑上：少了它整条功能栏就是个空壳（按钮一个都不显示） -->
+            <ItemsControl x:Name="ButtonHost"
+                          ItemsSource="{Binding Buttons}"
+                          VerticalAlignment="Center"
+                          HorizontalAlignment="Center">
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate>
+                        <Button Width="{Binding Size}"
+                                Height="{Binding Size}"
+                                Style="{StaticResource BarButton}"
+                                Command="{Binding InvokeCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                CommandParameter="{Binding}"
+                                ToolTip="{Binding Label}"
+                                AutomationProperties.Name="{Binding Label}">
+                            <Grid Width="24" Height="24">
+                                <Path Data="{Binding Outline}"
+                                      Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"
+                                      StrokeThickness="1.7"
+                                      StrokeStartLineCap="Round"
+                                      StrokeEndLineCap="Round"
+                                      StrokeLineJoin="Round" />
+                                <Path Data="{Binding Solid}"
+                                      Fill="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" />
+                            </Grid>
+                        </Button>
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
+        </Border>
+    </Grid>
+</Window>

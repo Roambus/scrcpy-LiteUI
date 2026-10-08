@@ -1,0 +1,1028 @@
+<UserControl x:Class="Kuaitou.App.Views.SettingsView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             x:Name="Root"
+             FontSize="14">
+
+    <!--
+      设置页四大板块：设备与连接 / 画面与声音 / 常规 / 诊断。
+      对应旧版 index.html 的 #pane-conn / #pane-screen / #pane-general，
+      设备与连接合并成一块（已连接设备 + 添加设备 + 最近连接），密码直接填在设备行里。
+
+      由侧边栏切换 PanelIndex（0=设备与连接 / 1=画面与声音 / 2=常规 / 3=诊断）。
+
+      文本输入一律 LostFocus 才提交（跟旧版 onchange 一致）：边打字边落盘既浪费，也会
+      在输入到一半的中间状态上写坏配置。
+    -->
+
+    <UserControl.Resources>
+        <!--
+          扫描结果里的一行：整行可点（点一下连接，或切到那台已连接的设备）。
+          按钮模板默认把内容居中，这里改成拉伸，地址左对齐、状态标签靠右。
+          悬停只浮动（位移 + 柔和阴影），不改底色 / 描边色。
+        -->
+        <Style x:Key="ScanRow" TargetType="Button">
+            <Setter Property="Foreground" Value="{DynamicResource Brush.Text}" />
+            <Setter Property="Background" Value="{DynamicResource Brush.Bg}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource Brush.Border}" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="HorizontalAlignment" Value="Stretch" />
+            <Setter Property="Margin" Value="0,0,0,6" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="SnapsToDevicePixels" Value="True" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="Bd"
+                                Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}"
+                                CornerRadius="{DynamicResource RadiusSm}"
+                                Padding="10,8"
+                                SnapsToDevicePixels="True">
+                            <ContentPresenter HorizontalAlignment="Stretch" VerticalAlignment="Center" />
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Bd" Property="RenderTransform">
+                                    <Setter.Value>
+                                        <TranslateTransform Y="-1" />
+                                    </Setter.Value>
+                                </Setter>
+                                <Setter TargetName="Bd" Property="Effect">
+                                    <Setter.Value>
+                                        <DropShadowEffect BlurRadius="12"
+                                                          ShadowDepth="2"
+                                                          Direction="270"
+                                                          Opacity="0.18"
+                                                          Color="#000000" />
+                                    </Setter.Value>
+                                </Setter>
+                            </Trigger>
+                            <Trigger Property="IsKeyboardFocused" Value="True">
+                                <Setter TargetName="Bd" Property="BorderBrush" Value="{DynamicResource Brush.Accent}" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+    </UserControl.Resources>
+
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+
+        <!--
+          去掉右侧滚动条（改成隐藏 + 触摸纵向滑动）：鼠标滚轮照常可用，
+          触屏 / 触控板上则可以直接拖着看，界面不会被一条灰条切掉一块。
+        -->
+        <ScrollViewer Grid.Row="0"
+                      VerticalScrollBarVisibility="Hidden"
+                      PanningMode="VerticalOnly"
+                      Padding="26,24,26,20">
+            <Grid MaxWidth="760" HorizontalAlignment="Center">
+                <!--
+                  每个板块占一行、Auto 高：不可见的那一行塌成 0，所以「设备与连接」
+                  这两块（设备行 + 添加设备）可以连着排下来，不会互相叠住。
+                -->
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                </Grid.RowDefinitions>
+
+                <!-- ==================== 0. 设备与连接 ==================== -->
+                <StackPanel x:Name="PanelDevice" Grid.Row="0">
+                    <TextBlock Style="{StaticResource PageTitle}" Text="设备与连接" />
+                    <TextBlock Style="{StaticResource PageDesc}"
+                               Text="接上手机：数据线插上就能用，也可以扫码 / 扫描 / 填 IP 无线连。已连接的手机会列在这儿，每台各自一行，可以直接解锁、关屏，或为它单独保存锁屏密码。" />
+
+                    <Border Style="{StaticResource SectionCard}">
+                        <StackPanel>
+                            <Grid Margin="0,0,0,16">
+                                <TextBlock Style="{StaticResource SectionTitle}"
+                                           Margin="0"
+                                           VerticalAlignment="Center"
+                                           Text="已连接设备" />
+                                <Button HorizontalAlignment="Right"
+                                        Style="{StaticResource BtnMini}"
+                                        Content="刷新"
+                                        Command="{Binding Devices.RefreshCommand}"
+                                        AutomationProperties.Name="刷新设备列表" />
+                            </Grid>
+
+                            <!-- 空状态：一台设备都没有时顶上那句说明 -->
+                            <TextBlock Text="还没有设备连接。接入数据线并允许 USB 调试，或到「连接」页填 IP 连上后，这里会列出手机。">
+                                <TextBlock.Style>
+                                    <Style TargetType="TextBlock" BasedOn="{StaticResource ItemDesc}">
+                                        <Setter Property="Visibility" Value="Collapsed" />
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding Devices.HasDevices}" Value="False">
+                                                <Setter Property="Visibility" Value="Visible" />
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </TextBlock.Style>
+                            </TextBlock>
+
+                            <ListBox ItemsSource="{Binding Devices.Devices}"
+                                     SelectedItem="{Binding Devices.Selected}"
+                                     ItemContainerStyle="{StaticResource DeviceRow}"
+                                     Background="Transparent"
+                                     BorderThickness="0"
+                                     Padding="0"
+                                     ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                                     AutomationProperties.Name="设备列表">
+                                <ListBox.ItemTemplate>
+                                    <DataTemplate>
+                                        <Grid>
+                                            <Grid.RowDefinitions>
+                                                <RowDefinition Height="Auto" />
+                                                <RowDefinition Height="Auto" />
+                                            </Grid.RowDefinitions>
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*" />
+                                                <ColumnDefinition Width="Auto" />
+                                            </Grid.ColumnDefinitions>
+
+                                            <StackPanel Grid.Row="0"
+                                                        Grid.Column="0"
+                                                        Margin="0,0,12,0"
+                                                        VerticalAlignment="Center">
+                                                <StackPanel Orientation="Horizontal">
+                                                    <TextBlock FontSize="13"
+                                                               FontWeight="SemiBold"
+                                                               VerticalAlignment="Center"
+                                                               Foreground="{DynamicResource Brush.Text}"
+                                                               Text="{Binding Name}" />
+                                                    <Border x:Name="Badge"
+                                                            Margin="8,0,0,0"
+                                                            Padding="7,1"
+                                                            CornerRadius="999"
+                                                            Background="{DynamicResource Brush.Card}"
+                                                            BorderBrush="{DynamicResource Brush.Border}"
+                                                            BorderThickness="1">
+                                                        <TextBlock x:Name="BadgeText"
+                                                                   FontSize="11"
+                                                                   Foreground="{DynamicResource Brush.TextDim}"
+                                                                   Text="{Binding StateText}" />
+                                                    </Border>
+                                                </StackPanel>
+                                                <TextBlock Margin="0,3,0,0"
+                                                           FontSize="12"
+                                                           FontFamily="Consolas, Microsoft YaHei UI"
+                                                           TextTrimming="CharacterEllipsis"
+                                                           Foreground="{DynamicResource Brush.TextDim}"
+                                                           Text="{Binding Address}" />
+                                            </StackPanel>
+
+                                            <StackPanel Grid.Row="0"
+                                                        Grid.Column="1"
+                                                        Orientation="Horizontal"
+                                                        VerticalAlignment="Center">
+                                                <Button Style="{StaticResource BtnMini}"
+                                                        Content="解锁"
+                                                        Margin="0,0,6,0"
+                                                        IsEnabled="{Binding IsOnline}"
+                                                        Command="{Binding DataContext.Devices.UnlockCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                                        CommandParameter="{Binding}" />
+                                                <Button Style="{StaticResource BtnMini}"
+                                                        Content="关屏"
+                                                        Margin="0,0,6,0"
+                                                        IsEnabled="{Binding IsOnline}"
+                                                        Command="{Binding DataContext.Devices.ScreenOffCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                                        CommandParameter="{Binding}" />
+                                                <Button Style="{StaticResource BtnMini}"
+                                                        Content="断开"
+                                                        Command="{Binding DataContext.Devices.DisconnectCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                                        CommandParameter="{Binding}" />
+                                            </StackPanel>
+
+                                            <!--
+                                              锁屏密码长在设备行里：一台设备一份，接几台都不会串。
+                                              只有在线设备才给填（离线设备存了也解不开）。
+                                            -->
+                                            <StackPanel Grid.Row="1"
+                                                        Grid.Column="0"
+                                                        Grid.ColumnSpan="2"
+                                                        Margin="0,10,0,0"
+                                                        Orientation="Horizontal">
+                                                <StackPanel.Style>
+                                                    <Style TargetType="StackPanel">
+                                                        <Setter Property="Visibility" Value="Collapsed" />
+                                                        <Style.Triggers>
+                                                            <DataTrigger Binding="{Binding IsOnline}" Value="True">
+                                                                <Setter Property="Visibility" Value="Visible" />
+                                                            </DataTrigger>
+                                                        </Style.Triggers>
+                                                    </Style>
+                                                </StackPanel.Style>
+                                                <TextBlock VerticalAlignment="Center"
+                                                           Margin="0,0,8,0"
+                                                           FontSize="12"
+                                                           Foreground="{DynamicResource Brush.TextDim}"
+                                                           Text="锁屏密码" />
+                                                <PasswordBox Width="120"
+                                                             Margin="0,0,8,0"
+                                                             Style="{StaticResource InputPassword}"
+                                                             PasswordChanged="OnDevicePinChanged"
+                                                             DataContextChanged="OnDevicePinBoxDataContextChanged"
+                                                             AutomationProperties.Name="锁屏数字密码" />
+                                                <Button Style="{StaticResource BtnMini}"
+                                                        Margin="0,0,8,0"
+                                                        Content="保存密码"
+                                                        Command="{Binding DataContext.Devices.SavePinCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                                        CommandParameter="{Binding}" />
+                                                <TextBlock VerticalAlignment="Center"
+                                                           FontSize="12"
+                                                           Foreground="{DynamicResource Brush.TextDim}">
+                                                    <TextBlock.Style>
+                                                        <Style TargetType="TextBlock">
+                                                            <Setter Property="Text" Value="未设置" />
+                                                            <Style.Triggers>
+                                                                <DataTrigger Binding="{Binding HasSavedPin}" Value="True">
+                                                                    <Setter Property="Text" Value="已设置" />
+                                                                    <Setter Property="Foreground" Value="{DynamicResource Brush.Green}" />
+                                                                </DataTrigger>
+                                                            </Style.Triggers>
+                                                        </Style>
+                                                    </TextBlock.Style>
+                                                </TextBlock>
+                                            </StackPanel>
+                                        </Grid>
+                                        <DataTemplate.Triggers>
+                                            <DataTrigger Binding="{Binding StateKind}" Value="online">
+                                                <Setter TargetName="BadgeText" Property="Foreground" Value="{DynamicResource Brush.Green}" />
+                                            </DataTrigger>
+                                            <DataTrigger Binding="{Binding StateKind}" Value="auth">
+                                                <Setter TargetName="BadgeText" Property="Foreground" Value="{DynamicResource Brush.Warn}" />
+                                            </DataTrigger>
+                                        </DataTemplate.Triggers>
+                                    </DataTemplate>
+                                </ListBox.ItemTemplate>
+                            </ListBox>
+
+                            <Border Style="{StaticResource ItemDivider}" />
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <StackPanel Grid.Column="0" Margin="0,0,16,0">
+                                    <TextBlock Style="{StaticResource ItemTitle}" Text="掉线自动重连" />
+                                    <TextBlock Style="{StaticResource ItemDesc}"
+                                               Text="无线掉线（手机熄屏、路由器休眠）后自动重连，间隔 6→60 秒逐次拉长，最多 10 次；主动点「断开」的设备不会重连。" />
+                                </StackPanel>
+                                <ToggleButton Grid.Column="1"
+                                              VerticalAlignment="Center"
+                                              Style="{StaticResource Switch}"
+                                              IsChecked="{Binding ReconnectEnabled}"
+                                              AutomationProperties.Name="掉线自动重连" />
+                            </Grid>
+                        </StackPanel>
+                    </Border>
+
+                    <Border Style="{StaticResource SectionCard}">
+                        <StackPanel>
+                            <TextBlock Style="{StaticResource SectionTitle}" Text="最近连接" />
+                            <TextBlock Text="连过一次的无线设备会记在这里，最多 5 台。">
+                                <TextBlock.Style>
+                                    <Style TargetType="TextBlock" BasedOn="{StaticResource ItemDesc}">
+                                        <Setter Property="Visibility" Value="Collapsed" />
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding Devices.RecentDevices.Count}" Value="0">
+                                                <Setter Property="Visibility" Value="Visible" />
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </TextBlock.Style>
+                            </TextBlock>
+                            <ItemsControl ItemsSource="{Binding Devices.RecentDevices}">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate>
+                                        <Border Background="{DynamicResource Brush.Bg}"
+                                                BorderBrush="{DynamicResource Brush.Border}"
+                                                BorderThickness="1"
+                                                CornerRadius="{DynamicResource RadiusSm}"
+                                                Padding="10,8"
+                                                Margin="0,0,0,6">
+                                            <Grid>
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="Auto" />
+                                                    <ColumnDefinition Width="*" />
+                                                </Grid.ColumnDefinitions>
+                                                <TextBlock Grid.Column="0"
+                                                           FontWeight="SemiBold"
+                                                           FontSize="12"
+                                                           Margin="0,0,10,0"
+                                                           Foreground="{DynamicResource Brush.Text}"
+                                                           Text="{Binding Name}" />
+                                                <TextBlock Grid.Column="1"
+                                                           FontSize="12"
+                                                           FontFamily="Consolas, Microsoft YaHei UI"
+                                                           TextTrimming="CharacterEllipsis"
+                                                           Foreground="{DynamicResource Brush.TextDim}"
+                                                           Text="{Binding Addr}" />
+                                            </Grid>
+                                        </Border>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </StackPanel>
+                    </Border>
+                </StackPanel>
+
+                <!-- ==================== 0（续）. 连接：添加设备 ==================== -->
+                <!-- 与上面的设备行同属「设备与连接」，所以不再另起一个页面标题 -->
+                <StackPanel x:Name="PanelConnect" Grid.Row="1" Margin="0,4,0,0">
+                    <Border Style="{StaticResource SectionCard}">
+                        <StackPanel>
+                            <TextBlock Style="{StaticResource SectionTitle}" Text="添加设备" />
+
+                            <!-- 扫码连接：电脑出二维码，手机扫一下自动配对 + 连接 -->
+                            <Button HorizontalAlignment="Stretch"
+                                    Style="{StaticResource BtnPrimary}"
+                                    Content="{Binding AddDevice.QrButtonText}"
+                                    Command="{Binding AddDevice.QrToggleCommand}"
+                                    AutomationProperties.Name="扫码连接" />
+
+                            <StackPanel Margin="0,12,0,0">
+                                <StackPanel.Style>
+                                    <Style TargetType="StackPanel">
+                                        <Setter Property="Visibility" Value="Collapsed" />
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding AddDevice.QrVisible}" Value="True">
+                                                <Setter Property="Visibility" Value="Visible" />
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </StackPanel.Style>
+                                <Border HorizontalAlignment="Center"
+                                        Padding="10"
+                                        Background="White"
+                                        CornerRadius="{DynamicResource RadiusSm}">
+                                    <Image Width="200"
+                                           Height="200"
+                                           Stretch="Uniform"
+                                           RenderOptions.BitmapScalingMode="NearestNeighbor"
+                                           Source="{Binding AddDevice.QrImage}" />
+                                </Border>
+                                <TextBlock Margin="0,8,0,0"
+                                           HorizontalAlignment="Center"
+                                           FontSize="12"
+                                           FontFamily="Consolas, Microsoft YaHei UI"
+                                           Foreground="{DynamicResource Brush.TextDim}"
+                                           Text="{Binding AddDevice.QrSub}" />
+                            </StackPanel>
+
+                            <TextBlock Margin="0,10,0,0"
+                                       Style="{StaticResource ItemDesc}"
+                                       Text="{Binding AddDevice.QrHint}" />
+
+                            <Border Style="{StaticResource SubDivider}" />
+
+                            <!-- 两级扫描：局域网（只探 5555）与深度搜索（端口段，再点一下停止） -->
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="8" />
+                                    <ColumnDefinition Width="*" />
+                                </Grid.ColumnDefinitions>
+                                <Button Grid.Column="0"
+                                        HorizontalAlignment="Stretch"
+                                        Style="{StaticResource Btn}"
+                                        Content="扫描局域网"
+                                        Command="{Binding AddDevice.ScanCommand}"
+                                        AutomationProperties.Name="扫描局域网" />
+                                <Button Grid.Column="2"
+                                        HorizontalAlignment="Stretch"
+                                        Style="{StaticResource Btn}"
+                                        Content="{Binding AddDevice.DeepButtonText}"
+                                        Command="{Binding AddDevice.DeepToggleCommand}"
+                                        AutomationProperties.Name="深度搜索" />
+                            </Grid>
+
+                            <ProgressBar Margin="0,10,0,0"
+                                         Height="4"
+                                         Maximum="100"
+                                         Foreground="{DynamicResource Brush.Accent}"
+                                         Value="{Binding AddDevice.DeepPercent, Mode=OneWay}">
+                                <ProgressBar.Style>
+                                    <Style TargetType="ProgressBar">
+                                        <Setter Property="Visibility" Value="Collapsed" />
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding AddDevice.DeepVisible}" Value="True">
+                                                <Setter Property="Visibility" Value="Visible" />
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </ProgressBar.Style>
+                            </ProgressBar>
+
+                            <TextBlock Margin="0,10,0,0"
+                                       Style="{StaticResource ItemDesc}"
+                                       Text="{Binding AddDevice.ScanHint}" />
+
+                            <ItemsControl Margin="0,12,0,0" ItemsSource="{Binding AddDevice.Results}">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate>
+                                        <Button Style="{StaticResource ScanRow}"
+                                                Command="{Binding DataContext.AddDevice.SelectCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                                CommandParameter="{Binding}">
+                                            <Grid>
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="*" />
+                                                    <ColumnDefinition Width="Auto" />
+                                                </Grid.ColumnDefinitions>
+                                                <TextBlock Grid.Column="0"
+                                                           FontSize="12"
+                                                           FontFamily="Consolas, Microsoft YaHei UI"
+                                                           TextTrimming="CharacterEllipsis"
+                                                           VerticalAlignment="Center"
+                                                           Foreground="{DynamicResource Brush.Text}"
+                                                           Text="{Binding Addr}"
+                                                           ToolTip="{Binding Source}" />
+                                                <TextBlock x:Name="RowTag"
+                                                           Grid.Column="1"
+                                                           Margin="10,0,0,0"
+                                                           FontSize="11"
+                                                           VerticalAlignment="Center"
+                                                           Foreground="{DynamicResource Brush.TextDim}"
+                                                           Text="{Binding Tag}" />
+                                            </Grid>
+                                        </Button>
+                                        <DataTemplate.Triggers>
+                                            <DataTrigger Binding="{Binding StateKind}" Value="online">
+                                                <Setter TargetName="RowTag" Property="Foreground" Value="{DynamicResource Brush.Green}" />
+                                            </DataTrigger>
+                                            <DataTrigger Binding="{Binding StateKind}" Value="wait">
+                                                <Setter TargetName="RowTag" Property="Foreground" Value="{DynamicResource Brush.Warn}" />
+                                            </DataTrigger>
+                                        </DataTemplate.Triggers>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+
+                            <Border Style="{StaticResource SubDivider}" />
+
+                            <TextBlock Style="{StaticResource FormLabel}" Text="其它方式" />
+
+                            <Grid Margin="0,0,0,14">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <StackPanel Grid.Column="0" Margin="0,0,24,0" VerticalAlignment="Center">
+                                    <TextBlock Style="{StaticResource ItemTitle}" Text="USB 转无线" />
+                                    <TextBlock Style="{StaticResource ItemDesc}"
+                                               Text="手机用数据线连上电脑（已允许 USB 调试）后点右边按钮：自动切到 5555 无线模式并连上，之后可以拔线。" />
+                                </StackPanel>
+                                <Button Grid.Column="1"
+                                        VerticalAlignment="Center"
+                                        Style="{StaticResource Btn}"
+                                        Content="USB 转无线"
+                                        Command="{Binding Devices.UsbToWifiCommand}"
+                                        AutomationProperties.Name="USB 转无线" />
+                            </Grid>
+
+                            <Grid Margin="0,0,0,14">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <StackPanel Grid.Column="0" Margin="0,0,24,0" VerticalAlignment="Center">
+                                    <TextBlock Style="{StaticResource ItemTitle}" Text="按地址连接" />
+                                    <TextBlock Style="{StaticResource ItemDesc}" Text="知道手机 IP 时直接连，端口默认 5555。" />
+                                </StackPanel>
+                                <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
+                                    <TextBox Width="150"
+                                             Style="{StaticResource InputBox}"
+                                             Text="{Binding Devices.ConnectIp, UpdateSourceTrigger=PropertyChanged}"
+                                             AutomationProperties.Name="设备 IP 地址" />
+                                    <TextBox Width="84"
+                                             Margin="8,0,0,0"
+                                             Style="{StaticResource InputBox}"
+                                             Text="{Binding Devices.ConnectPort}"
+                                             AutomationProperties.Name="设备端口" />
+                                    <Button Margin="8,0,0,0"
+                                            Style="{StaticResource BtnPrimary}"
+                                            Content="连接"
+                                            Command="{Binding Devices.ConnectCommand}"
+                                            AutomationProperties.Name="连接设备" />
+                                </StackPanel>
+                            </Grid>
+
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <StackPanel Grid.Column="0" Margin="0,0,24,0" VerticalAlignment="Center">
+                                    <TextBlock Style="{StaticResource ItemTitle}" Text="首次配对" />
+                                    <TextBlock Style="{StaticResource ItemDesc}"
+                                               Text="手机「无线调试 → 使用配对码配对设备」里显示的那两个数，填上点「配对」。" />
+                                </StackPanel>
+                                <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
+                                    <TextBox x:Name="PairPortBox"
+                                             Width="150"
+                                             Style="{StaticResource InputBox}"
+                                             Text="{Binding AddDevice.PairPort, UpdateSourceTrigger=PropertyChanged}"
+                                             AutomationProperties.Name="配对端口" />
+                                    <TextBox x:Name="PairCodeBox"
+                                             Width="130"
+                                             Margin="8,0,0,0"
+                                             Style="{StaticResource InputBox}"
+                                             Text="{Binding AddDevice.PairCode, UpdateSourceTrigger=PropertyChanged}"
+                                             AutomationProperties.Name="配对码" />
+                                    <Button Margin="8,0,0,0"
+                                            Style="{StaticResource Btn}"
+                                            Content="配对"
+                                            Command="{Binding AddDevice.PairCommand}"
+                                            AutomationProperties.Name="首次配对" />
+                                </StackPanel>
+                            </Grid>
+                        </StackPanel>
+                    </Border>
+                </StackPanel>
+
+                <!-- ==================== 1. 画面与声音 ==================== -->
+                <StackPanel x:Name="PanelScreen" Grid.Row="2" Visibility="Collapsed">
+                    <TextBlock Style="{StaticResource PageTitle}" Text="画面与声音" />
+                    <TextBlock Style="{StaticResource PageDesc}"
+                               Text="投屏的画面参数、虚拟屏分辨率与声音输出。改完重新投屏一次即可生效。" />
+
+                    <Border Style="{StaticResource SectionCard}">
+                        <StackPanel>
+                            <TextBlock Style="{StaticResource SectionTitle}" Text="画面" />
+                            <TextBlock Style="{StaticResource SectionDesc}"
+                                       Text="这几项对「镜像应用」和「镜像桌面」都生效；改完重新投屏一次即可。" />
+
+                            <Grid Margin="0,0,0,14">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <StackPanel Grid.Column="0" Margin="0,0,24,0" VerticalAlignment="Center">
+                                    <TextBlock Style="{StaticResource ItemTitle}" Text="最大帧率" />
+                                    <TextBlock Style="{StaticResource ItemDesc}" Text="上限帧率，越高越流畅、越费电。" />
+                                </StackPanel>
+                                <TextBox Grid.Column="1"
+                                         Width="132"
+                                         VerticalAlignment="Center"
+                                         Style="{StaticResource InputBox}"
+                                         Text="{Binding Fps, UpdateSourceTrigger=LostFocus}"
+                                         AutomationProperties.Name="最大帧率" />
+                            </Grid>
+
+                            <Grid Margin="0,0,0,14">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <StackPanel Grid.Column="0" Margin="0,0,24,0" VerticalAlignment="Center">
+                                    <TextBlock Style="{StaticResource ItemTitle}" Text="码率" />
+                                    <TextBlock Style="{StaticResource ItemDesc}" Text="单位 Mbps。画面糊 / 卡时可以先调它。" />
+                                </StackPanel>
+                                <TextBox Grid.Column="1"
+                                         Width="132"
+                                         VerticalAlignment="Center"
+                                         Style="{StaticResource InputBox}"
+                                         Text="{Binding Bitrate, UpdateSourceTrigger=LostFocus}"
+                                         AutomationProperties.Name="码率" />
+                            </Grid>
+
+                            <Grid Margin="0,0,0,14">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <StackPanel Grid.Column="0" Margin="0,0,24,0" VerticalAlignment="Center">
+                                    <TextBlock Style="{StaticResource ItemTitle}" Text="视频编码" />
+                                    <TextBlock Style="{StaticResource ItemDesc}" Text="不确定就用「自动」，由 scrcpy 自己挑。" />
+                                </StackPanel>
+                                <ComboBox Grid.Column="1"
+                                          Width="212"
+                                          VerticalAlignment="Center"
+                                          Style="{StaticResource InputCombo}"
+                                          ItemContainerStyle="{StaticResource ComboItem}"
+                                          ItemsSource="{Binding VideoCodecOptions}"
+                                          DisplayMemberPath="Label"
+                                          SelectedValuePath="Value"
+                                          SelectedValue="{Binding VideoCodec}"
+                                          AutomationProperties.Name="视频编码" />
+                            </Grid>
+
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <StackPanel Grid.Column="0" Margin="0,0,24,0" VerticalAlignment="Center">
+                                    <TextBlock Style="{StaticResource ItemTitle}" Text="最大尺寸" />
+                                    <TextBlock Style="{StaticResource ItemDesc}" Text="画面长边的上限，填 0 表示原始分辨率。" />
+                                </StackPanel>
+                                <TextBox Grid.Column="1"
+                                         Width="132"
+                                         VerticalAlignment="Center"
+                                         Style="{StaticResource InputBox}"
+                                         Text="{Binding MaxSize, UpdateSourceTrigger=LostFocus}"
+                                         AutomationProperties.Name="最大尺寸" />
+                            </Grid>
+                        </StackPanel>
+                    </Border>
+
+                    <Border Style="{StaticResource SectionCard}">
+                        <StackPanel>
+                            <TextBlock Style="{StaticResource SectionTitle}" Text="虚拟屏（仅「镜像应用」）" />
+                            <TextBlock Style="{StaticResource SectionDesc}"
+                                       Text="启动快捷启动里的应用时，按下面的分辨率新开一块虚拟屏，不影响手机本身的设置。「镜像桌面」显示的是手机真实画面，与此无关。" />
+
+                            <Grid Margin="0,0,0,14">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <StackPanel Grid.Column="0" Margin="0,0,24,0" VerticalAlignment="Center">
+                                    <TextBlock Style="{StaticResource ItemTitle}" Text="分辨率" />
+                                    <TextBlock Style="{StaticResource ItemDesc}" Text="虚拟屏的宽 × 高（像素）。" />
+                                </StackPanel>
+                                <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
+                                    <TextBox Width="100"
+                                             Style="{StaticResource InputBox}"
+                                             Text="{Binding ResW, UpdateSourceTrigger=LostFocus}"
+                                             AutomationProperties.Name="虚拟屏宽" />
+                                    <TextBlock Margin="8,0"
+                                               VerticalAlignment="Center"
+                                               Foreground="{DynamicResource Brush.TextDim}"
+                                               Text="×" />
+                                    <TextBox Width="100"
+                                             Style="{StaticResource InputBox}"
+                                             Text="{Binding ResH, UpdateSourceTrigger=LostFocus}"
+                                             AutomationProperties.Name="虚拟屏高" />
+                                </StackPanel>
+                            </Grid>
+
+                            <Grid Margin="0,0,0,14">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <StackPanel Grid.Column="0" Margin="0,0,24,0" VerticalAlignment="Center">
+                                    <TextBlock Style="{StaticResource ItemTitle}" Text="UI 放大倍数" />
+                                    <TextBlock Style="{StaticResource ItemDesc}" Text="填 1.0 时界面大小与电脑的显示缩放一致。" />
+                                </StackPanel>
+                                <TextBox Grid.Column="1"
+                                         Width="132"
+                                         VerticalAlignment="Center"
+                                         Style="{StaticResource InputBox}"
+                                         Text="{Binding Scale, UpdateSourceTrigger=LostFocus}"
+                                         AutomationProperties.Name="UI 放大倍数" />
+                            </Grid>
+
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <StackPanel Grid.Column="0" Margin="0,0,24,0" VerticalAlignment="Center">
+                                    <TextBlock Style="{StaticResource ItemTitle}" Text="分辨率预设" />
+                                    <TextBlock Style="{StaticResource ItemDesc}" Text="常用的几组尺寸存下来，下次直接选。" />
+                                </StackPanel>
+                                <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
+                                    <ComboBox Width="180"
+                                              Style="{StaticResource InputCombo}"
+                                              ItemContainerStyle="{StaticResource ComboItem}"
+                                              ItemsSource="{Binding ResPresets}"
+                                              SelectedItem="{Binding SelectedPreset}"
+                                              SelectionChanged="OnPresetSelected"
+                                              AutomationProperties.Name="分辨率预设" />
+                                    <Button Margin="8,0,0,0"
+                                            Style="{StaticResource Btn}"
+                                            Content="保存当前"
+                                            Click="OnSavePreset" />
+                                    <Button Margin="8,0,0,0"
+                                            Style="{StaticResource Btn}"
+                                            Content="删除所选"
+                                            Command="{Binding DeletePresetCommand}" />
+                                </StackPanel>
+                            </Grid>
+                        </StackPanel>
+                    </Border>
+
+                    <Border Style="{StaticResource SectionCard}">
+                        <StackPanel>
+                            <TextBlock Style="{StaticResource SectionTitle}" Text="声音" />
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <StackPanel Grid.Column="0" Margin="0,0,24,0" VerticalAlignment="Center">
+                                    <TextBlock Style="{StaticResource ItemTitle}" Text="声音输出" />
+                                    <TextBlock Style="{StaticResource ItemDesc}" Text="投屏时声音从手机还是电脑出来。" />
+                                </StackPanel>
+                                <ComboBox Grid.Column="1"
+                                          Width="212"
+                                          VerticalAlignment="Center"
+                                          Style="{StaticResource InputCombo}"
+                                          ItemContainerStyle="{StaticResource ComboItem}"
+                                          ItemsSource="{Binding AudioModeOptions}"
+                                          DisplayMemberPath="Label"
+                                          SelectedValuePath="Value"
+                                          SelectedValue="{Binding AudioMode}"
+                                          AutomationProperties.Name="声音输出" />
+                            </Grid>
+                        </StackPanel>
+                    </Border>
+                </StackPanel>
+
+                <!-- ==================== 2. 常规 ==================== -->
+                <StackPanel x:Name="PanelGeneral" Grid.Row="3" Visibility="Collapsed">
+                    <TextBlock Style="{StaticResource PageTitle}" Text="常规" />
+                    <TextBlock Style="{StaticResource PageDesc}"
+                               Text="窗口与托盘的行为、投屏窗口的开关、主题，以及开机自启动。" />
+
+                    <Border Style="{StaticResource SectionCard}">
+                        <StackPanel>
+                            <TextBlock Style="{StaticResource SectionTitle}" Text="窗口与托盘" />
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <StackPanel Grid.Column="0" Margin="0,0,16,0">
+                                    <TextBlock Style="{StaticResource ItemTitle}" Text="关闭主界面时缩小到托盘" />
+                                    <TextBlock Style="{StaticResource ItemDesc}"
+                                               Text="开启后点关闭不会退出应用，而是收进系统托盘继续在后台待命；右键托盘图标可以重新打开主界面、按设备启动镜像桌面或快捷启动的应用，或退出应用。" />
+                                </StackPanel>
+                                <ToggleButton Grid.Column="1"
+                                              VerticalAlignment="Center"
+                                              Style="{StaticResource Switch}"
+                                              IsChecked="{Binding MinimizeToTray}"
+                                              AutomationProperties.Name="关闭主界面时缩小到托盘" />
+                            </Grid>
+                        </StackPanel>
+                    </Border>
+
+                    <Border Style="{StaticResource SectionCard}">
+                        <StackPanel>
+                            <StackPanel Orientation="Horizontal">
+                                <TextBlock Style="{StaticResource SectionTitle}" Text="投屏窗口" Margin="0,0,8,16" />
+                                <Border VerticalAlignment="Top"
+                                        Margin="0,0,0,16"
+                                        Padding="7,1"
+                                        Background="{DynamicResource Brush.Bg}"
+                                        BorderBrush="{DynamicResource Brush.Border}"
+                                        BorderThickness="1"
+                                        CornerRadius="999">
+                                    <TextBlock FontSize="11"
+                                               Foreground="{DynamicResource Brush.TextDim}"
+                                               Text="需重新投屏生效" />
+                                </Border>
+                            </StackPanel>
+
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <StackPanel Grid.Column="0" Margin="0,0,16,0">
+                                    <TextBlock Style="{StaticResource ItemTitle}" Text="只看不控" />
+                                    <TextBlock Style="{StaticResource ItemDesc}"
+                                               Text="投屏窗口只显示画面，在画面上点击、打字都不再传到手机，防止误触。注意右侧功能栏的那些按键走的是另一条通道，不受这里影响——它们是你明确点的，不是误触。" />
+                                </StackPanel>
+                                <ToggleButton Grid.Column="1"
+                                              VerticalAlignment="Center"
+                                              Style="{StaticResource Switch}"
+                                              IsChecked="{Binding NoControl}"
+                                              AutomationProperties.Name="只看不控" />
+                            </Grid>
+
+                            <Border Style="{StaticResource ItemDivider}" />
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <StackPanel Grid.Column="0" Margin="0,0,16,0">
+                                    <TextBlock Style="{StaticResource ItemTitle}" Text="关窗熄屏" />
+                                    <TextBlock Style="{StaticResource ItemDesc}"
+                                               Text="投屏窗口一关，顺手把手机屏幕也熄掉（只关显示、不会锁定，跟主页那个「关闭物理屏幕」是一回事），省电。" />
+                                </StackPanel>
+                                <ToggleButton Grid.Column="1"
+                                              VerticalAlignment="Center"
+                                              Style="{StaticResource Switch}"
+                                              IsChecked="{Binding PowerOffOnClose}"
+                                              AutomationProperties.Name="关窗熄屏" />
+                            </Grid>
+
+                            <Border Style="{StaticResource ItemDivider}" />
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <StackPanel Grid.Column="0" Margin="0,0,16,0">
+                                    <TextBlock Style="{StaticResource ItemTitle}" Text="鼠标捕获" />
+                                    <TextBlock Style="{StaticResource ItemDesc}"
+                                               Text="把电脑鼠标变成相对模式、光标锁在投屏窗口里，玩游戏时鼠标移动直接落到手机上。打开后要按 scrcpy 的快捷键才能脱出，平时不用开。键盘一直是直通手机的，不需要设置。" />
+                                </StackPanel>
+                                <ToggleButton Grid.Column="1"
+                                              VerticalAlignment="Center"
+                                              Style="{StaticResource Switch}"
+                                              IsChecked="{Binding MouseCapture}"
+                                              AutomationProperties.Name="鼠标捕获" />
+                            </Grid>
+                        </StackPanel>
+                    </Border>
+
+                    <Border Style="{StaticResource SectionCard}">
+                        <StackPanel>
+                            <TextBlock Style="{StaticResource SectionTitle}" Text="外观" />
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <StackPanel Grid.Column="0" Margin="0,0,16,0">
+                                    <TextBlock Style="{StaticResource ItemTitle}" Text="浅色主题" />
+                                    <TextBlock Style="{StaticResource ItemDesc}"
+                                               Text="开启后整个界面换成浅色；主窗口标题栏会跟着换成同色。默认浅色。" />
+                                </StackPanel>
+                                <ToggleButton Grid.Column="1"
+                                              VerticalAlignment="Center"
+                                              Style="{StaticResource Switch}"
+                                              IsChecked="{Binding IsLightTheme}"
+                                              AutomationProperties.Name="浅色主题" />
+                            </Grid>
+                        </StackPanel>
+                    </Border>
+
+                    <Border Style="{StaticResource SectionCard}">
+                        <StackPanel>
+                            <TextBlock Style="{StaticResource SectionTitle}" Text="启动" />
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <StackPanel Grid.Column="0" Margin="0,0,16,0">
+                                    <TextBlock Style="{StaticResource ItemTitle}" Text="开机自启动" />
+                                    <TextBlock Style="{StaticResource ItemDesc}"
+                                               Text="开机后在后台静默启动（只驻系统托盘，不弹主界面），右键托盘图标即可投屏。开启时会自动打开上面的「缩小到托盘」。" />
+                                </StackPanel>
+                                <ToggleButton Grid.Column="1"
+                                              VerticalAlignment="Center"
+                                              Style="{StaticResource Switch}"
+                                              IsChecked="{Binding Autostart}"
+                                              AutomationProperties.Name="开机自启动" />
+                            </Grid>
+                        </StackPanel>
+                    </Border>
+                </StackPanel>
+
+                <!-- ==================== 3. 诊断 ==================== -->
+                <StackPanel x:Name="PanelDiag" Grid.Row="4" Visibility="Collapsed">
+                    <TextBlock Style="{StaticResource PageTitle}" Text="诊断" />
+                    <TextBlock Style="{StaticResource PageDesc}"
+                               Text="换电脑后「连得上 adb 却扫不出应用 / 投不出画面」时，先在这里跑一次诊断。" />
+
+                    <Border Style="{StaticResource SectionCard}">
+                        <StackPanel>
+                            <Grid Margin="0,0,0,10">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="8" />
+                                    <ColumnDefinition Width="*" />
+                                </Grid.ColumnDefinitions>
+                                <Button Grid.Column="0"
+                                        HorizontalAlignment="Stretch"
+                                        Style="{StaticResource Btn}"
+                                        Content="环境自检"
+                                        Command="{Binding RunSelfCheckCommand}"
+                                        AutomationProperties.Name="环境自检" />
+                                <Button Grid.Column="2"
+                                        HorizontalAlignment="Stretch"
+                                        Style="{StaticResource Btn}"
+                                        Content="完整诊断"
+                                        Command="{Binding RunDeepDiagCommand}"
+                                        AutomationProperties.Name="完整诊断" />
+                            </Grid>
+                            <TextBlock Style="{StaticResource ItemDesc}"
+                                       Text="「完整诊断」会把 adb 输出、投屏日志与配置的存放位置一起打出来；跑完弹「另存为」，由你选报告的保存位置（取消则只在这里显示结果）。" />
+                            <Grid Margin="0,10,0,0">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="8" />
+                                    <ColumnDefinition Width="*" />
+                                </Grid.ColumnDefinitions>
+                                <Button Grid.Column="0"
+                                        HorizontalAlignment="Stretch"
+                                        Style="{StaticResource Btn}"
+                                        Content="保存诊断报告"
+                                        Command="{Binding SaveReportCommand}"
+                                        AutomationProperties.Name="保存诊断报告" />
+                                <Button Grid.Column="2"
+                                        HorizontalAlignment="Stretch"
+                                        Style="{StaticResource Btn}"
+                                        Content="导出日志"
+                                        Command="{Binding ExportLogCommand}"
+                                        AutomationProperties.Name="导出日志" />
+                            </Grid>
+
+                            <!-- 诊断结果：只读、可选中复制；跑之前收起来 -->
+                            <Border Margin="0,12,0,0"
+                                    Padding="12,10"
+                                    Background="{DynamicResource Brush.Bg}"
+                                    BorderBrush="{DynamicResource Brush.Border}"
+                                    BorderThickness="1"
+                                    CornerRadius="{DynamicResource RadiusSm}">
+                                <Border.Style>
+                                    <Style TargetType="Border">
+                                        <Setter Property="Visibility" Value="Collapsed" />
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding HasDiag}" Value="True">
+                                                <Setter Property="Visibility" Value="Visible" />
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </Border.Style>
+                                <ScrollViewer MaxHeight="420" VerticalScrollBarVisibility="Auto">
+                                    <TextBox Text="{Binding DiagText, Mode=OneWay}"
+                                             IsReadOnly="True"
+                                             BorderThickness="0"
+                                             Background="Transparent"
+                                             TextWrapping="NoWrap"
+                                             FontSize="12"
+                                             FontFamily="Consolas, Microsoft YaHei UI"
+                                             Foreground="{DynamicResource Brush.TextDim}"
+                                             AutomationProperties.Name="诊断结果" />
+                                </ScrollViewer>
+                            </Border>
+                        </StackPanel>
+                    </Border>
+                </StackPanel>
+            </Grid>
+        </ScrollViewer>
+
+        <!-- 底部：提示条 + 常驻版本号 -->
+        <Border Grid.Row="1"
+                BorderBrush="{DynamicResource Brush.Border}"
+                BorderThickness="0,1,0,0">
+            <StackPanel>
+                <TextBlock Margin="24,8,24,0"
+                           FontSize="12"
+                           TextWrapping="Wrap"
+                           Text="{Binding Hint}">
+                    <TextBlock.Style>
+                        <Style TargetType="TextBlock">
+                            <Setter Property="Foreground" Value="{DynamicResource Brush.Accent}" />
+                            <Setter Property="Visibility" Value="Collapsed" />
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding HasHint}" Value="True">
+                                    <Setter Property="Visibility" Value="Visible" />
+                                </DataTrigger>
+                                <DataTrigger Binding="{Binding HintIsError}" Value="True">
+                                    <Setter Property="Foreground" Value="{DynamicResource Brush.Red}" />
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </TextBlock.Style>
+                </TextBlock>
+                <!--
+                  设备操作（连接 / 断开 / 解锁 / 关闭屏幕 / 保存密码）的反馈走的是 Devices 自己的
+                  提示条：不在这里显示的话，点了「保存密码」界面上什么都没发生，用户会以为没存上。
+                -->
+                <TextBlock Margin="26,6,26,0"
+                           FontSize="12"
+                           TextWrapping="Wrap"
+                           Text="{Binding Devices.Hint}">
+                    <TextBlock.Style>
+                        <Style TargetType="TextBlock">
+                            <Setter Property="Foreground" Value="{DynamicResource Brush.Accent}" />
+                            <Setter Property="Visibility" Value="Collapsed" />
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding Devices.HasHint}" Value="True">
+                                    <Setter Property="Visibility" Value="Visible" />
+                                </DataTrigger>
+                                <DataTrigger Binding="{Binding Devices.HintIsError}" Value="True">
+                                    <Setter Property="Foreground" Value="{DynamicResource Brush.Red}" />
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </TextBlock.Style>
+                </TextBlock>
+                <TextBlock HorizontalAlignment="Center"
+                           Margin="0,8,0,10"
+                           FontSize="11"
+                           Foreground="{DynamicResource Brush.TextDim}"
+                           Text="{Binding Version, StringFormat=版本 {0}}" />
+            </StackPanel>
+        </Border>
+    </Grid>
+</UserControl>

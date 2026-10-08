@@ -3,9 +3,9 @@
 图标素材库（icons/）不入库（图标版权归各 App 所有者，见 THIRD-PARTY-NOTICES.md），
 所以换台电脑重新打包前，用这个脚本把素材库补回来：
 
-    .build\\venv\\Scripts\\python.exe scripts\\fetch_icons.py          # 只补缺失的
-    .build\\venv\\Scripts\\python.exe scripts\\fetch_icons.py --slim   # 顺带统一尺寸瘦身
-    .build\\venv\\Scripts\\python.exe scripts\\fetch_icons.py --limit 20
+    .build\\venv\\Scripts\\python.exe legacy\\scripts\\fetch_icons.py          # 只补缺失的
+    .build\\venv\\Scripts\\python.exe legacy\\scripts\\fetch_icons.py --slim   # 顺带统一尺寸瘦身
+    .build\\venv\\Scripts\\python.exe legacy\\scripts\\fetch_icons.py --limit 20
 
 目标包名来自两处：脚本内置的常用应用清单，以及本机 apps_cache.json 里真机装过的应用。
 图标来源复用程序在线抓取时用的三个源（应用宝 → 小米商店 → iTunes）。
@@ -17,13 +17,18 @@ import json
 import os
 import sys
 
-ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-sys.path.insert(0, ROOT)
+LEGACY = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))   # legacy/
+ROOT = os.path.dirname(LEGACY)                                         # 仓库根
+sys.path.insert(0, LEGACY)
 
 from PIL import Image  # noqa: E402
 
 from kuaitou import apps  # noqa: E402
-from kuaitou.storage import ICON_DIR, ICON_EXTS  # noqa: E402
+from kuaitou.storage import ICON_EXTS  # noqa: E402
+
+# kuaitou.storage 里的路径是按「自身所在包的上一级」推出来的，归档进 legacy/ 之后
+# 那套路径会落到 legacy/ 下；素材库该补的仍是仓库根的 icons/，所以这里直接改指 ROOT。
+ICON_DIR = os.path.join(ROOT, "icons")
 
 LIB_SIZE = 128          # 素材库统一尺寸：界面里图标最大显示 48px，128 够 2 倍屏用
 WORKERS = 8

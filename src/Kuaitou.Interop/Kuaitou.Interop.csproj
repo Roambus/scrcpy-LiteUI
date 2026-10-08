@@ -1,0 +1,8 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <!-- 只放 P/Invoke：ADS 探针辅助、投屏窗口叠加层、DWM、窗口枚举、ARP 表 -->
+  </PropertyGroup>
+
+</Project>

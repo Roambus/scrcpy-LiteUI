@@ -1,0 +1,27 @@
+<Project>
+
+  <!--
+    跨项目统一属性。版本号只在这一个地方维护：发版脚本（scripts/release.ps1）与 CI
+    都读这里，CI 还会用 FileVersionInfo 把产物版本号跟这里比对，不一致就让流水线变红。
+
+    版本号规则见 docs/开发.md：第一位=大更新、第二位=小更新、第三位=纯修 bug。
+    这次从 Python 版 1.9.0 直接跳到 2.0.0（换技术栈、与旧版不兼容）。
+  -->
+  <PropertyGroup>
+    <Version>2.0.0</Version>
+    <AssemblyVersion>2.0.0.0</AssemblyVersion>
+    <FileVersion>2.0.0.0</FileVersion>
+
+    <LangVersion>latest</LangVersion>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <NeutralLanguage>zh-Hans</NeutralLanguage>
+
+    <Product>快投</Product>
+    <Company>快投</Company>
+
+    <!-- 验收要求 dotnet build -warnaserror 通过，平时构建就按同一标准来 -->
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+  </PropertyGroup>
+
+</Project>

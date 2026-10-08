@@ -1,0 +1,39 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <!--
+      刻意不引 WPF：这里的纯业务逻辑（scrcpy 命令拼装、adb 输出解析、配置合并、图标匹配）
+      必须能脱离界面单测。命令拼错了界面看不出来，只有测试能拦。
+    -->
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!--
+      只为了拿窗口层的那几个 Win32 调用（按 PID 找 scrcpy 窗口、等窗口出现、唤到前台、
+      戳一下强制重排、取系统 DPI）。这些旧版就在 device.py 里，跟投屏启动是一条链。
+    -->
+    <ProjectReference Include="..\Kuaitou.Interop\Kuaitou.Interop.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!--
+      SkiaSharp（MIT）：图标入库那一步要用它解码 WebP 并统一转成 256×256 PNG。
+      WIC 的 WebP 解码不可靠（WebP 是商店扩展而非系统内置，用户没装就解不出来，
+      且 WIC 解 WebP 掉 alpha），所以入库阶段固定用 Skia，运行期 WPF 只读原生 PNG。
+    -->
+    <PackageReference Include="SkiaSharp" Version="3.119.4" />
+    <PackageReference Include="SkiaSharp.NativeAssets.Win32" Version="3.119.4" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- 拼音表（声母韵母 → 常用汉字）随程序内置，搜索框的拼音 / 首字母匹配要用 -->
+    <EmbeddedResource Include="Apps\PinyinData.txt" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- 让测试能直接验内部纯函数（如深度搜索「状态没变不发」的比较） -->
+    <InternalsVisibleTo Include="Kuaitou.Core.Tests" />
+  </ItemGroup>
+
+</Project>

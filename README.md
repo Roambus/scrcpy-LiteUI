@@ -1,15 +1,15 @@
 # scrcpy-LiteUI（快投）
 
 ![平台](https://img.shields.io/badge/平台-Windows%2010%20%7C%2011-0078D4)
-![Python](https://img.shields.io/badge/Python-3.12-3776AB?logo=python&logoColor=white)
+![.NET](https://img.shields.io/badge/.NET-10.0-512BD4?logo=dotnet&logoColor=white)
 ![许可证](https://img.shields.io/badge/许可证-Apache--2.0-blue)
 [![最新版本](https://img.shields.io/github/v/release/Dandelion-nj/scrcpy-LiteUI)](https://github.com/Dandelion-nj/scrcpy-LiteUI/releases)
 
 Windows 上给 [scrcpy](https://github.com/Genymobile/scrcpy) 套的一层图形化启动器。
 目标是把「安卓投屏」这件事从命令行里解放出来：**插上线或连上 Wi-Fi，点一下就能投**。
 
-界面基于 pywebview（Edge WebView2）+ 原生 JS，无前端构建步骤；后端为单进程 Python，
-可打包成**单文件便携 EXE**，拷到任何 Windows 机器直接运行。
+界面是原生 WPF（C# / .NET 10），可打包成**单文件便携 EXE**：拷到任何 Windows 机器直接运行，
+**不用装 .NET，也不用装 WebView2**（运行时与随包资源都装在 exe 里）。
 
 ## 快速开始
 
@@ -18,12 +18,13 @@ Windows 上给 [scrcpy](https://github.com/Genymobile/scrcpy) 套的一层图形
 
 > 发布页里显示的名字是「快投.exe」，但 GitHub 的发布资产不支持中文文件名（会被平台清成
 > `default.exe`），所以每个版本都以 `Kuaitou-v版本号.exe` 的名字上传
-> （例如 v1.8.1 下载下来是 `Kuaitou-v1.8.1.exe`）。
+> （例如 v2.0.0 下载下来是 `Kuaitou-v2.0.0.exe`）。配置写在 exe 自身的 NTFS 数据流里，
+> **想沿用旧设置就把文件改名成 `快投.exe`**——文件名变了就读不到原来的配置。
 
 | 项目 | 要求 |
 | --- | --- |
-| 系统 | Windows 10 1809+ / Windows 11 |
-| 界面运行时 | **Microsoft Edge WebView2 Runtime**（多数 Win11 已内置；缺失时程序会提示并提供官方下载页） |
+| 系统 | Windows 10 1809+ / Windows 11（x64） |
+| 运行时 | 无。单文件自包含，.NET 运行时与随包资源都在 exe 里 |
 | 手机 | Android，需开启「开发者选项 → USB 调试」；扫码配对需 Android 11+ |
 
 从源码运行、打包、发版见[开发](docs/开发.md)。
@@ -50,7 +51,7 @@ Windows 上给 [scrcpy](https://github.com/Genymobile/scrcpy) 套的一层图形
 
 - 可折叠的左侧边栏，设置类标签收在底部；浅色（默认）/ 深色两套主题，主窗口标题栏跟主题同色
 - 主页第一行与快捷启动区**固定在顶部**，不随列表滚动；快捷启动每台**最多 8 个**
-- 界面图标一律用内联 SVG 绘制，不用 emoji（字形 / 颜色 / 尺寸跨系统一致，且自动跟随主题色）
+- 界面图标一律用矢量图形绘制，不用 emoji（字形 / 颜色 / 尺寸跨系统一致，且自动跟随主题色）
 
 **其它**
 
